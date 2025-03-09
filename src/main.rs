@@ -1,4 +1,5 @@
 use csv::ReaderBuilder;
+use tx_engine::Tx;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input_path = match std::env::args_os().nth(1) {
@@ -12,7 +13,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rdr = ReaderBuilder::new().flexible(true).from_path(input_path)?;
     for result in rdr.into_records() {
         let line = result?;
-        println!("{:?}", line);
+        let tx = Tx::try_from(line)?;
+        println!("{:?}", tx);
     }
     Ok(())
 }
