@@ -1,11 +1,12 @@
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 use std::collections::HashMap;
 
 #[derive(Debug)]
 struct Client {
     id: u16,
-    available: f64,
-    held: f64,
-    total: f64,
+    available: u64,
+    held: u64,
+    total: u64,
     locked: bool,
 }
 #[derive(Debug)]
@@ -13,7 +14,7 @@ pub struct Tx {
     type_: String,
     client_id: u16,
     id: u32,
-    amount: Option<f64>,
+    amount: Option<u64>,
     disputed: bool,
 }
 
@@ -41,7 +42,7 @@ impl State {
         };
     }
 
-    fn dispute_checks(&self, tx_ref: &Tx, tx_type: &str) -> Option<f64> {
+    fn dispute_checks(&self, tx_ref: &Tx, tx_type: &str) -> Option<u64> {
         match tx_type {
             // handles case where deposit gets disputed in bad input
             "dispute" if self.tx_store.get(&tx_ref.id).unwrap().type_ == "deposit" => {
@@ -82,7 +83,7 @@ impl State {
             .or_insert(Client {
                 id: tx.client_id,
                 available: dep_amt,
-                held: 0.0,
+                held: 0,
                 total: dep_amt,
                 locked: false,
             });
@@ -108,7 +109,7 @@ impl State {
 
     fn dispute(&mut self, tx: Tx) {
         if self.tx_store.contains_key(&tx.id) {
-            let amt: Option<f64> = self.dispute_checks(&tx, tx.type_.as_str());
+            let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
 
             if amt.is_none() {
                 return;
@@ -129,7 +130,7 @@ impl State {
 
     fn resolve(&mut self, tx: Tx) {
         if self.tx_store.contains_key(&tx.id) {
-            let amt: Option<f64> = self.dispute_checks(&tx, tx.type_.as_str());
+            let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
 
             if amt.is_none() {
                 return;
@@ -150,7 +151,7 @@ impl State {
 
     fn chargeback(&mut self, tx: Tx) {
         if self.tx_store.contains_key(&tx.id) {
-            let amt: Option<f64> = self.dispute_checks(&tx, tx.type_.as_str());
+            let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
 
             if amt.is_none() {
                 return;
@@ -189,7 +190,11 @@ impl TryFrom<csv::StringRecord> for Tx {
                         id,
                         amount: match record.get(3).unwrap().trim() {
                             "None" => None,
-                            v => Some(v.parse::<f64>()?),
+                            v => Some(
+                                (Decimal::from_str_exact(v)? * Decimal::from(10000))
+                                    .to_u64()
+                                    .unwrap(),
+                            ),
                         },
                         disputed,
                     })
