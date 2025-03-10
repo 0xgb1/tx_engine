@@ -1,6 +1,8 @@
+use convert_case::{Case, Casing};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use std::collections::HashMap;
 use std::fmt;
+use tracing::{debug, info, warn};
 
 #[derive(Debug)]
 struct Client {
@@ -27,6 +29,7 @@ pub struct State {
 
 impl State {
     pub fn show(&self) {
+        println!("client, available, held, total, locked");
         for client in self.client_store.values() {
             println!("{}", client);
         }
@@ -51,32 +54,44 @@ impl State {
             "dispute" => self.dispute(tx),
             "resolve" => self.resolve(tx),
             "chargeback" => self.chargeback(tx),
-            _ => todo!("add to log, invalid transaction type"),
+            _ => warn!("Invalid transaction type. Transaction: {}", tx.log_fmt()),
         };
     }
 
     fn dispute_checks(&self, tx_ref: &Tx, tx_type: &str) -> Option<u64> {
         match tx_type {
             // handles case where deposit gets disputed in bad input
-            "dispute" if self.tx_store.get(&tx_ref.id).unwrap().type_ == "deposit" => {
-                todo!("add to log, dispute's tx id references a deposit");
+            "dispute" if self.tx_store.get(&tx_ref.id).unwrap().type_ == "withdrawal" => {
+                warn!(
+                    "Dispute's tx id references a withdrawal. Transaction: {}",
+                    tx_ref.log_fmt()
+                );
+                return None;
             }
             "resolve" | "chargeback" if !self.tx_store.get(&tx_ref.id).unwrap().disputed => {
-                todo!(
-                    "add to log, {} failed because transaction is not disputed",
-                    tx_type
+                warn!(
+                    "{} failed because transaction is not disputed. Transaction: {}",
+                    tx_type.to_case(Case::Sentence),
+                    tx_ref.log_fmt()
                 );
+                return None;
             }
             _ => {
                 // sanity check for case where tx exists but client doesn't (shouldn't happen)
                 if !self.client_store.contains_key(&tx_ref.client_id) {
-                    todo!("add to log, client doesn't exist but tx does");
+                    warn!(
+                        "Client ID not found while tx ID is. Transaction: {}",
+                        tx_ref.log_fmt()
+                    );
+                    return None;
                 }
                 if self.tx_store.get(&tx_ref.id).unwrap().client_id != tx_ref.client_id {
-                    todo!(
-                        "add to log, {}'s client ID does not match the tx's client id",
-                        tx_type
+                    warn!(
+                        "{}'s client ID does not match the tx's client ID. Transaction: {}",
+                        tx_type.to_case(Case::Sentence),
+                        tx_ref.log_fmt()
                     );
+                    return None;
                 }
             }
         }
@@ -100,23 +115,32 @@ impl State {
                 total: dep_amt,
                 locked: false,
             });
+        info!("Deposit succeeded: {}", tx.log_fmt());
         self.tx_store.insert(tx.id, tx);
     }
 
     fn withdrawal(&mut self, tx: Tx) {
         if self.client_store.contains_key(&tx.client_id) {
             let withd_amt = tx.amount.unwrap();
-            self.client_store.entry(tx.client_id).and_modify(|acct| {
-                if withd_amt <= acct.available {
+            if withd_amt <= self.client_store.get(&tx.client_id).unwrap().available {
+                self.client_store.entry(tx.client_id).and_modify(|acct| {
                     acct.available -= withd_amt;
-                    acct.total -= withd_amt
-                } else {
-                    todo!("add to log, withdrawal exceeded client funds)");
-                }
-            });
+                    acct.total -= withd_amt;
+                });
+            } else {
+                warn!(
+                    "Withdrawal exceeded client funds. Transaction: {}",
+                    tx.log_fmt()
+                );
+                return;
+            }
+            debug!("Withdrawal succeeded: {}", tx.log_fmt());
             self.tx_store.insert(tx.id, tx);
         } else {
-            todo!("add to log, client doesn't exist");
+            warn!(
+                "Client ID not found in client store. Transaction: {}",
+                tx.log_fmt()
+            );
         }
     }
 
@@ -136,8 +160,15 @@ impl State {
             self.tx_store
                 .entry(tx.id)
                 .and_modify(|tx| tx.disputed = true);
+            debug!(
+                "Dispute succeeded: {}",
+                self.tx_store.get(&tx.id).unwrap().log_fmt()
+            )
         } else {
-            todo!("add to log, dispute failed because transaction doesn't exist");
+            warn!(
+                "Transaction ID not found in tx store. Transaction: {}",
+                tx.log_fmt()
+            );
         }
     }
 
@@ -157,8 +188,12 @@ impl State {
             self.tx_store
                 .entry(tx.id)
                 .and_modify(|tx| tx.disputed = false);
+            debug!("Resolve succeeded: {}", tx.log_fmt())
         } else {
-            todo!("add to log, resolve failed because transaction doesn't exist");
+            warn!(
+                "Transaction ID not found in tx store. Transaction: {}",
+                tx.log_fmt()
+            );
         }
     }
 
@@ -179,8 +214,12 @@ impl State {
             self.client_store
                 .entry(tx.client_id)
                 .and_modify(|acct| acct.locked = true);
+            debug!("Chargeback succeeded: {}", tx.log_fmt())
         } else {
-            todo!("add to log, chargeback failed because transaction id doesn't exist");
+            warn!(
+                "Transaction ID not found in tx store, Transaction: {}",
+                tx.log_fmt()
+            );
         }
     }
 }
@@ -235,6 +274,20 @@ impl fmt::Display for Client {
             f,
             "{}, {}, {}, {}, {}",
             self.id, available, held, total, self.locked
+        )
+    }
+}
+
+impl Tx {
+    pub fn log_fmt(&self) -> String {
+        let amount = if let Some(amt) = self.amount {
+            State::amt_u64_parse(amt)
+        } else {
+            "None".to_string()
+        };
+        format!(
+            "Tx {{ type_: \"{}\", client_id: {}, id: {}, amount: {}, disputed: {} }}",
+            self.type_, self.client_id, self.id, amount, self.disputed
         )
     }
 }

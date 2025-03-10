@@ -1,0 +1,22 @@
+title = "tx_engine logger config"
+
+[layer.log-file]
+type = "fmt"
+writer = "log-file"
+formatter = "full"
+span_events = "active"
+ansi = false
+
+[writer.log-file]
+type = "file"
+directory_path = ""
+file_name = "tx_engine"
+file_ext = "log"
+max_log_files = 7 
+rotation = "daily"
+non_blocking = true
+lossy = true
+
+
+[filter.root]
+level = "info"
