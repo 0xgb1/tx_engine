@@ -1,5 +1,6 @@
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use std::collections::HashMap;
+use std::fmt;
 
 #[derive(Debug)]
 struct Client {
@@ -27,8 +28,20 @@ pub struct State {
 impl State {
     pub fn show(&self) {
         for client in self.client_store.values() {
-            println!("{:?}", client);
+            println!("{}", client);
         }
+    }
+
+    fn amt_u64_parse(val: u64) -> String {
+        // converts the u64 values back to decimal values with four places and gets
+        // them to display nicely
+        let val = Decimal::from(val) / Decimal::from(10000);
+        let val_str: String = if val.fract().is_zero() {
+            format!("{:.1}", val)
+        } else {
+            val.normalize().to_string()
+        };
+        val_str
     }
 
     pub fn handle_tx(&mut self, tx: Tx) {
@@ -210,5 +223,18 @@ impl TryFrom<csv::StringRecord> for Tx {
             }
             _ => Err("Invalid transaction format".into()),
         }
+    }
+}
+
+impl fmt::Display for Client {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let available = State::amt_u64_parse(self.available);
+        let held = State::amt_u64_parse(self.held);
+        let total = State::amt_u64_parse(self.total);
+        write!(
+            f,
+            "{}, {}, {}, {}, {}",
+            self.id, available, held, total, self.locked
+        )
     }
 }
