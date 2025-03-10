@@ -1,8 +1,11 @@
 use convert_case::{Case, Casing};
-use rust_decimal::{Decimal, prelude::ToPrimitive};
+use rust_decimal::{
+    Decimal,
+    prelude::{FromPrimitive, ToPrimitive},
+};
 use std::collections::HashMap;
 use std::fmt;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug)]
 struct Client {
@@ -25,6 +28,7 @@ pub struct Tx {
 pub struct State {
     client_store: HashMap<u16, Client>,
     tx_store: HashMap<u32, Tx>,
+    dispute_store: HashMap<u32, u64>,
 }
 
 impl State {
@@ -60,7 +64,7 @@ impl State {
 
     fn dispute_checks(&self, tx_ref: &Tx, tx_type: &str) -> Option<u64> {
         match tx_type {
-            // handles case where deposit gets disputed in bad input
+            // handles case where withdrawal gets disputed in bad input
             "dispute" if self.tx_store.get(&tx_ref.id).unwrap().type_ == "withdrawal" => {
                 warn!(
                     "Dispute's tx id references a withdrawal. Transaction: {}",
@@ -96,11 +100,20 @@ impl State {
             }
         }
         // if every case isn't matched and every condition not met (successful tx)
-        let amt = Some(self.tx_store.get(&tx_ref.id).unwrap().amount.unwrap());
+        let amt = self.tx_store.get(&tx_ref.id).unwrap().amount;
         amt
     }
 
     fn deposit(&mut self, tx: Tx) {
+        if self.client_store.contains_key(&tx.client_id)
+            && self.client_store.get(&tx.client_id).unwrap().locked
+        {
+            info!(
+                "Client account is locked; deposit failed. Transaction: {}",
+                tx.log_fmt()
+            );
+            return;
+        }
         let dep_amt = tx.amount.unwrap();
         self.client_store
             .entry(tx.client_id)
@@ -150,18 +163,37 @@ impl State {
 
             if amt.is_none() {
                 return;
+            } else if amt.unwrap() == 0 {
+                debug!(
+                    "Dispute's transaction is of zero value. Transaction: {}",
+                    tx.log_fmt()
+                );
+                return;
             }
 
-            let disp_amt = amt.unwrap();
-            self.client_store.entry(tx.client_id).and_modify(|acct| {
-                acct.available -= disp_amt;
-                acct.held += disp_amt;
-            });
+            let mut disp_amt = amt.unwrap();
+
+            if disp_amt <= self.client_store.get(&tx.client_id).unwrap().available {
+                self.client_store.entry(tx.client_id).and_modify(|acct| {
+                    acct.available -= disp_amt;
+                    acct.held += disp_amt;
+                });
+            } else {
+                self.client_store.entry(tx.client_id).and_modify(|acct| {
+                    disp_amt = acct.available;
+                    acct.held += disp_amt;
+                    acct.available = 0;
+                });
+            }
+
+            self.dispute_store.insert(tx.id, disp_amt);
+
             self.tx_store
                 .entry(tx.id)
                 .and_modify(|tx| tx.disputed = true);
             debug!(
-                "Dispute succeeded: {}",
+                "Dispute succeeded for amount {}: {}",
+                Decimal::from_u64(disp_amt).unwrap() / Decimal::from(10000),
                 self.tx_store.get(&tx.id).unwrap().log_fmt()
             )
         } else {
@@ -174,13 +206,21 @@ impl State {
 
     fn resolve(&mut self, tx: Tx) {
         if self.tx_store.contains_key(&tx.id) {
+            if self.client_store.get(&tx.client_id).unwrap().locked {
+                error!(
+                    "Client account is locked; resolve failed. Transaction: {}",
+                    tx.log_fmt()
+                );
+                return;
+            }
             let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
 
             if amt.is_none() {
                 return;
             }
-
-            let disp_amt = amt.unwrap();
+            // if the resolve has proceeded this far, it should be for a recorded
+            // dispute, so this time it pulls the amount from dispute_store
+            let disp_amt = self.dispute_store.get(&tx.id).unwrap();
             self.client_store.entry(tx.client_id).and_modify(|acct| {
                 acct.available += disp_amt;
                 acct.held -= disp_amt;
@@ -188,7 +228,11 @@ impl State {
             self.tx_store
                 .entry(tx.id)
                 .and_modify(|tx| tx.disputed = false);
-            debug!("Resolve succeeded: {}", tx.log_fmt())
+            debug!(
+                "Resolve succeeded for amount {}: {}",
+                Decimal::from_u64(*disp_amt).unwrap() / Decimal::from(10000),
+                tx.log_fmt()
+            )
         } else {
             warn!(
                 "Transaction ID not found in tx store. Transaction: {}",
@@ -199,14 +243,21 @@ impl State {
 
     fn chargeback(&mut self, tx: Tx) {
         if self.tx_store.contains_key(&tx.id) {
+            if self.client_store.get(&tx.client_id).unwrap().locked {
+                info!(
+                    "Client account is locked; chargeback failed. Transaction: {}",
+                    tx.log_fmt()
+                );
+                return;
+            }
             let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
 
             if amt.is_none() {
                 return;
             }
-
-            let disp_amt = amt.unwrap();
-
+            // if the chargeback has proceeded this far, it should be for a recorded
+            // dispute, so this time it pulls the amount from dispute_store
+            let disp_amt = self.dispute_store.get(&tx.id).unwrap();
             self.client_store.entry(tx.client_id).and_modify(|acct| {
                 acct.total -= disp_amt;
                 acct.held -= disp_amt;
@@ -214,7 +265,11 @@ impl State {
             self.client_store
                 .entry(tx.client_id)
                 .and_modify(|acct| acct.locked = true);
-            debug!("Chargeback succeeded: {}", tx.log_fmt())
+            debug!(
+                "Chargeback succeeded for amount {}: {}",
+                Decimal::from_u64(*disp_amt).unwrap() / Decimal::from(10000),
+                tx.log_fmt()
+            )
         } else {
             warn!(
                 "Transaction ID not found in tx store, Transaction: {}",
@@ -279,7 +334,7 @@ impl fmt::Display for Client {
 }
 
 impl Tx {
-    pub fn log_fmt(&self) -> String {
+    fn log_fmt(&self) -> String {
         let amount = if let Some(amt) = self.amount {
             State::amt_u64_parse(amt)
         } else {
