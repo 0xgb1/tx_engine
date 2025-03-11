@@ -1,5 +1,6 @@
 use csv::ReaderBuilder;
 use toml_edit::{DocumentMut, value};
+use tracing::error;
 use tx_engine::{State, Tx};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -31,8 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for result in rdr.into_records() {
         let line = result?;
 
-        let tx = Tx::try_from(line)?;
-        ledger.handle_tx(tx);
+        match Tx::try_from(line) {
+            Ok(tx) => ledger.handle_tx(tx),
+            Err(err) => error!("Unable to create transaction from csv line record. {}", err),
+        };
     }
     ledger.show();
     Ok(())

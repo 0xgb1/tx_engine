@@ -297,11 +297,15 @@ impl TryFrom<csv::StringRecord> for Tx {
                         id,
                         amount: match record.get(3).unwrap().trim() {
                             "None" => None,
-                            v => Some(
-                                (Decimal::from_str_exact(v)? * Decimal::from(10000))
-                                    .to_u64()
-                                    .unwrap(),
-                            ),
+                            v => {
+                                let value =
+                                    (Decimal::from_str_exact(v)? * Decimal::from(10000)).to_u64();
+                                if value.is_none() {
+                                    return Err(format!("Invalid number amount: {}", v).into());
+                                } else {
+                                    value
+                                }
+                            }
                         },
                         disputed,
                     })
@@ -315,7 +319,7 @@ impl TryFrom<csv::StringRecord> for Tx {
                     })
                 }
             }
-            _ => Err("Invalid transaction format".into()),
+            _ => Err(format!("Invalid transaction format: {:?}", record).into()),
         }
     }
 }
