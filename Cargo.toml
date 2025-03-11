@@ -10,3 +10,6 @@ rust_decimal = "1.36.0"
 toml_edit = "0.22.24"
 tracing = "0.1.41"
 tracing-config = "0.2.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
