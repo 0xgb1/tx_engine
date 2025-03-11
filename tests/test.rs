@@ -42,8 +42,8 @@ fn test_dispute_resolve() -> Result<(), Box<dyn std::error::Error>> {
     let output = cmd.output()?;
     let stdout = String::from_utf8(output.stdout).expect("Found invalid UTF-8");
 
-    let ans = "1, 2443.629, 0.0, 2443.629, false\
-    2, 0.0, 0.0, 0.0, true\
+    let ans = "1, 1843.629, 0.0, 1843.629, false\
+    2, 346.12, 0.0, 346.12, false\
     3, 100.0, 0.0, 100.0, false";
 
     let v: Vec<&str> = stdout.split("\n").collect();
@@ -59,9 +59,9 @@ fn test_chargeback() -> Result<(), Box<dyn std::error::Error>> {
     let output = cmd.output()?;
     let stdout = String::from_utf8(output.stdout).expect("Found invalid UTF-8");
 
-    let ans = "1, 4832.1223, 0.0, 4832.1223, true\
-    2, 8750.2, 0.0, 8750.2, false\
-    3, 0.0, 0.0, 0.0, true";
+    let ans = "1, 5680.0223, 0.0, 5680.0223, false\
+    2, 9098.1, 0.0, 9098.1, true\
+    3, 2893.8171, 0.0, 2893.8171, true";
 
     let v: Vec<&str> = stdout.split("\n").collect();
     let s = clean_up_string(v.clone());

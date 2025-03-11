@@ -64,10 +64,10 @@ impl State {
 
     fn dispute_checks(&self, tx_ref: &Tx, tx_type: &str) -> Option<u64> {
         match tx_type {
-            // handles case where withdrawal gets disputed in bad input
-            "dispute" if self.tx_store.get(&tx_ref.id).unwrap().type_ == "withdrawal" => {
+            // handles case where deposit gets disputed in bad input
+            "dispute" if self.tx_store.get(&tx_ref.id).unwrap().type_ == "deposit" => {
                 warn!(
-                    "Dispute's tx id references a withdrawal. Transaction: {}",
+                    "Dispute's tx id references a deposit. Transaction: {}",
                     tx_ref.log_fmt()
                 );
                 return None;
@@ -134,6 +134,14 @@ impl State {
 
     fn withdrawal(&mut self, tx: Tx) {
         if self.client_store.contains_key(&tx.client_id) {
+            if self.client_store.get(&tx.client_id).unwrap().locked {
+                info!(
+                    "Client account is locked; deposit failed. Transaction: {}",
+                    tx.log_fmt()
+                );
+                return;
+            }
+
             let withd_amt = tx.amount.unwrap();
             if withd_amt <= self.client_store.get(&tx.client_id).unwrap().available {
                 self.client_store.entry(tx.client_id).and_modify(|acct| {
@@ -159,6 +167,14 @@ impl State {
 
     fn dispute(&mut self, tx: Tx) {
         if self.tx_store.contains_key(&tx.id) {
+            if self.client_store.get(&tx.client_id).unwrap().locked {
+                error!(
+                    // not allowing disputes if consumer is disputing
+                    "Client account is locked; dispute failed. Transaction: {}",
+                    tx.log_fmt()
+                );
+                return;
+            }
             let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
 
             if amt.is_none() {
@@ -171,23 +187,14 @@ impl State {
                 return;
             }
 
-            let mut disp_amt = amt.unwrap();
+            let disp_amt = amt.unwrap();
 
-            if disp_amt <= self.client_store.get(&tx.client_id).unwrap().available {
-                self.client_store.entry(tx.client_id).and_modify(|acct| {
-                    acct.available -= disp_amt;
-                    acct.held += disp_amt;
-                });
-            } else {
-                self.client_store.entry(tx.client_id).and_modify(|acct| {
-                    disp_amt = acct.available;
-                    acct.held += disp_amt;
-                    acct.available = 0;
-                });
-            }
+            self.client_store.entry(tx.client_id).and_modify(|acct| {
+                acct.total += disp_amt;
+                acct.held += disp_amt;
+            });
 
             self.dispute_store.insert(tx.id, disp_amt);
-
             self.tx_store
                 .entry(tx.id)
                 .and_modify(|tx| tx.disputed = true);
@@ -222,7 +229,7 @@ impl State {
             // dispute, so this time it pulls the amount from dispute_store
             let disp_amt = self.dispute_store.get(&tx.id).unwrap();
             self.client_store.entry(tx.client_id).and_modify(|acct| {
-                acct.available += disp_amt;
+                acct.total -= disp_amt;
                 acct.held -= disp_amt;
             });
             self.tx_store
@@ -259,7 +266,7 @@ impl State {
             // dispute, so this time it pulls the amount from dispute_store
             let disp_amt = self.dispute_store.get(&tx.id).unwrap();
             self.client_store.entry(tx.client_id).and_modify(|acct| {
-                acct.total -= disp_amt;
+                acct.available += disp_amt;
                 acct.held -= disp_amt;
             });
             self.client_store
