@@ -75,7 +75,7 @@ impl State {
             // handles case where deposit gets disputed in bad input
             "dispute" if tx.type_ == "deposit" => {
                 warn!(
-                    "Dispute's tx id references a withdrawal. Transaction: {}",
+                    "Dispute's tx id references a deposit. Transaction: {}",
                     tx_ref.log_fmt()
                 );
                 return None;
@@ -175,7 +175,7 @@ impl State {
 
     fn dispute(&mut self, tx: Tx) {
         let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
-        
+
         // if amt.is_none(), then the tx didn't pass the checks
         if amt.is_none() {
             return;
@@ -213,7 +213,6 @@ impl State {
             self.tx_store.get(&tx.id).unwrap().log_fmt()
         )
     }
-
 
     fn resolve(&mut self, tx: Tx) {
         let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
@@ -254,7 +253,7 @@ impl State {
         if amt.is_none() {
             return;
         }
-        
+
         if self.client_store.get(&tx.client_id).unwrap().locked {
             info!(
                 "Client account is locked; chargeback failed. Transaction: {}",
