@@ -171,7 +171,6 @@ impl State {
         // if amt.is_none(), then the tx didn't pass the checks
         if amt.is_none() {
             return;
-
         } else if amt.unwrap() == 0 {
             debug!(
                 "Dispute's transaction is of zero value. Transaction: {}",
@@ -208,6 +207,12 @@ impl State {
     }
 
     fn resolve(&mut self, tx: Tx) {
+        let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
+
+        // if amt.is_none(), then the tx didn't pass the checks
+        if amt.is_none() {
+            return;
+        }
         if self.client_store.get(&tx.client_id).unwrap().locked {
             error!(
                 "Client account is locked; resolve failed. Transaction: {}",
@@ -215,12 +220,7 @@ impl State {
             );
             return;
         }
-        let amt: Option<u64> = self.dispute_checks(&tx, tx.type_.as_str());
 
-        // if amt.is_none(), then the tx didn't pass the checks
-        if amt.is_none() {
-            return;
-        }
         // if the resolve has proceeded this far, it should be for a recorded
         // dispute, so this time it pulls the amount from dispute_store
         let disp_amt = self.dispute_store.get(&tx.id).unwrap();
