@@ -1,4 +1,5 @@
 use assert_cmd::prelude::*;
+use std::path::Path;
 use std::process::Command;
 
 fn clean_up_string(mut res: Vec<&str>) -> String {
@@ -13,10 +14,13 @@ fn clean_up_string(mut res: Vec<&str>) -> String {
 #[test]
 fn test_deposit_withdrawal() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("tx_engine")?;
-    cmd.arg(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/deposit_withdrawal.csv"
-    ));
+    let test_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("deposit_withdrawal.csv")
+        .into_os_string()
+        .into_string()
+        .unwrap();
+    cmd.arg(test_path);
     let output = cmd.output()?;
     let stdout = String::from_utf8(output.stdout).expect("Found invalid UTF-8");
 
@@ -35,10 +39,13 @@ fn test_deposit_withdrawal() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_dispute_resolve() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("tx_engine")?;
-    cmd.arg(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/dispute_resolve.csv"
-    ));
+    let test_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("dispute_resolve.csv")
+        .into_os_string()
+        .into_string()
+        .unwrap();
+    cmd.arg(test_path);
     let output = cmd.output()?;
     let stdout = String::from_utf8(output.stdout).expect("Found invalid UTF-8");
 
@@ -55,7 +62,13 @@ fn test_dispute_resolve() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_chargeback() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("tx_engine")?;
-    cmd.arg(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/chargeback.csv"));
+    let test_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("chargeback.csv")
+        .into_os_string()
+        .into_string()
+        .unwrap();
+    cmd.arg(test_path);
     let output = cmd.output()?;
     let stdout = String::from_utf8(output.stdout).expect("Found invalid UTF-8");
 

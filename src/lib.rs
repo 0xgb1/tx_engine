@@ -108,8 +108,7 @@ impl State {
             }
         }
         // if every case isn't matched and every condition not met (successful tx)
-        let amt = tx.amount;
-        amt
+        tx.amount
     }
 
     fn deposit(&mut self, tx: Tx) {
