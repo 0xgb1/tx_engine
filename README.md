@@ -13,7 +13,7 @@ It can also be tested with the following command:
 
 ```cargo test -- --test-threads=1```
 
-> :warning: **It is important that that the binary not be tested with more than one thread (i.e. with `cargo test` alone). Use the option `--test-threads=1` at all times.**
+> :warning: **It is important that that the binary not be tested with more than one thread (i.e. with `cargo test` alone). Use the option `--test-threads=1` at all times. Note that `cargo testing` is aliased to `cargo test -- --test-threads=1`.**
 
 `tx_engine` is stable as a result of strict, often redundant checking on transactions (although not every possible redundancy is covered). The program is also secure
 given Rust's security guarantees, the exact needs of the program (e.g. a lack of opportunities for data races), and the fact that all dependencies were chosen
