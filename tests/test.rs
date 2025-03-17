@@ -1,4 +1,5 @@
 use assert_cmd::prelude::*;
+use std::error::Error;
 use std::path::Path;
 use std::process::Command;
 
@@ -12,7 +13,7 @@ fn clean_up_string(mut res: Vec<&str>) -> String {
 }
 
 #[test]
-fn test_deposit_withdrawal() -> Result<(), Box<dyn std::error::Error>> {
+fn test_deposit_withdrawal() -> Result<(), Box<dyn Error>> {
     let mut cmd = Command::cargo_bin("tx_engine")?;
     let test_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -37,7 +38,7 @@ fn test_deposit_withdrawal() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_dispute_resolve() -> Result<(), Box<dyn std::error::Error>> {
+fn test_dispute_resolve() -> Result<(), Box<dyn Error>> {
     let mut cmd = Command::cargo_bin("tx_engine")?;
     let test_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -60,7 +61,7 @@ fn test_dispute_resolve() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_chargeback() -> Result<(), Box<dyn std::error::Error>> {
+fn test_chargeback() -> Result<(), Box<dyn Error>> {
     let mut cmd = Command::cargo_bin("tx_engine")?;
     let test_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
